@@ -117,3 +117,47 @@ def test_pptx_numbered_list_marker_follows_layout_auto_number_type(tmp_path: Pat
     doc = get_converter().convert(pptx_path).document
 
     assert doc.export_to_markdown() == "# Steps\n\n- i) Prepare\n- ii) Ship"
+
+
+def test_pptx_numbered_list_restarts_when_start_at_changes(tmp_path: Path):
+    """A numbered list restarts when ``startAt`` changes between paragraphs.
+
+    PowerPoint shows these two text boxes as "1. 2. 7. 8." and "5. 6. 1. 2.",
+    but ``startAt`` used to be read only for the first numbered paragraph, so
+    the items were numbered "1. 2. 3. 4." and "5. 6. 7. 8.".
+    """
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    boxes: list[list[tuple[str, str | None]]] = [
+        [("One", None), ("Two", None), ("Seven", "7"), ("Eight", "7")],
+        [("Five", "5"), ("Six", "5"), ("First", None), ("Second", None)],
+    ]
+    for top, paragraphs in enumerate(boxes, start=1):
+        box = slide.shapes.add_textbox(Inches(1), Inches(top), Inches(4), Inches(1))
+        box.text_frame.text = paragraphs[0][0]
+        for text, _ in paragraphs[1:]:
+            box.text_frame.add_paragraph().text = text
+        for paragraph, (_, start_at) in zip(box.text_frame.paragraphs, paragraphs):
+            attrs = {"type": "arabicPeriod"}
+            if start_at is not None:
+                attrs["startAt"] = start_at
+            paragraph._p.get_or_add_pPr().append(
+                paragraph._p.makeelement(qn("a:buAutoNum"), attrs)
+            )
+    pptx_path = tmp_path / "start_at_changes.pptx"
+    prs.save(pptx_path)
+
+    doc = get_converter().convert(pptx_path).document
+
+    assert [
+        (item.marker, item.text) for item in doc.texts if isinstance(item, ListItem)
+    ] == [
+        ("1.", "One"),
+        ("2.", "Two"),
+        ("7.", "Seven"),
+        ("8.", "Eight"),
+        ("5.", "Five"),
+        ("6.", "Six"),
+        ("1.", "First"),
+        ("2.", "Second"),
+    ]
