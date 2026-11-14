@@ -252,12 +252,15 @@ class _OpenList:
         counter: The number of enumerated items added to the group so far.
         last_item: The most recent item in the group, which parents any list
             nested below it.
+        last_start: The ``startAt`` value of the most recent numbered item in
+            the group, or None before the first one.
     """
 
     group: ListGroup
     level: int
     counter: int = 0
     last_item: Optional[ListItem] = None
+    last_start: Optional[int] = None
 
 
 _ROMAN_NUMERALS: Final[tuple[tuple[int, str], ...]] = (
@@ -1177,8 +1180,10 @@ class MsPowerpointDocumentBackend(DeclarativeDocumentBackend, PaginatedDocumentB
                 current = open_lists[-1]
 
                 if enumerated:
-                    if current.counter == 0:
-                        current.counter = self._get_auto_number_start(p) - 1
+                    start = self._get_auto_number_start(p)
+                    if start != current.last_start:
+                        current.last_start = start
+                        current.counter = start - 1
                     current.counter += 1
                     enum_marker = _auto_number_marker(
                         current.counter, auto_number_scheme
